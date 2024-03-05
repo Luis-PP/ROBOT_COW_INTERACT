@@ -11,22 +11,26 @@ def robot_cow_draw(agent):
     elif agent.kind == "cow":
         return {"Shape": "circle", "r": 12, "Filled": "true", "Color": "Black"}
     elif agent.kind == "cubicle":
-        return {"Shape": "rect", "w": 0.049, "h":0.2, "Filled": "true", "Color": agent.color}
+        return {"Shape": "rect", "w": 0.044, "h":0.2, "Filled": "true", "Color": agent.color}
     elif agent.kind == "feeder":
-        return {"Shape": "rect", "w": 0.049, "h":0.1, "Filled": "true", "Color": agent.color}
+        return {"Shape": "rect", "w": 0.044, "h":0.1, "Filled": "true", "Color": agent.color}
     elif agent.kind == "drinker":
-        return {"Shape": "rect", "w": 0.049, "h":0.1, "Filled": "true", "Color": agent.color}
+        return {"Shape": "rect", "w": 0.044, "h":0.1, "Filled": "true", "Color": agent.color}
     elif agent.kind == "milker":
-        return {"Shape": "rect", "w": 0.05, "h":0.4, "Filled": "true", "Color": agent.color}
+        return {"Shape": "rect", "w": 0.045, "h":0.4, "Filled": "true", "Color": agent.color}
     elif agent.kind == "concentrate":
-        return {"Shape": "rect", "w": 0.049, "h":0.1, "Filled": "true", "Color": agent.color}
+        return {"Shape": "rect", "w": 0.044, "h":0.1, "Filled": "true", "Color": agent.color}
     elif agent.kind == "bound":
         return {"Shape": "rect", "w": 0.001, "h":0.002, "Filled": "true", "Color": "black"}
+    elif agent.kind == "nest":
+        return {"Shape": "rect", "w": 0.044, "h":0.2, "Filled": "true", "Color": agent.color}
+    elif agent.kind == "manure":
+        return {"Shape": "circle", "r": 4, "Filled": "true", "Color": "Purple"}
 
-robot_cow_canvas = SimpleCanvas(portrayal_method=robot_cow_draw, canvas_height=500, canvas_width=1000)
+robot_cow_canvas = SimpleCanvas(portrayal_method=robot_cow_draw, canvas_height=500, canvas_width=1100)
 
 model_params = {
-    "width": 1001,
+    "width": 1101,
     "height": 501,
     "Cow_parameters": mesa.visualization.StaticText("Cow Parameters"),
     "cow_num": mesa.visualization.Slider(

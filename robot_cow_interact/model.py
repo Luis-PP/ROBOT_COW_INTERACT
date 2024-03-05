@@ -2,7 +2,7 @@ import mesa
 import numpy as np
 import geopandas as gpd
 from shapely.geometry import Polygon
-from robot_cow_interact.agents import Robot, Cow, Patch, Bound
+from robot_cow_interact.agents import Robot, Cow, Patch, Bound, Nest
 
 
 class RobotCow(mesa.Model):
@@ -22,6 +22,7 @@ class RobotCow(mesa.Model):
         robot_caution,
     ) -> None:
         super().__init__()
+        self.random.seed(36)
         self.cow_num = cow_num
         self.cow_step = cow_step
         self.cow_vision = cow_vision
@@ -49,7 +50,7 @@ class RobotCow(mesa.Model):
         kind = "cubicle"
         color = " #935116 "
         offset = (25, 50)
-        for col in range(275, self.space.width, 50):
+        for col in range(275, self.space.width - 100, 50):
             for row in [50, 275]:
                 cubicles.append(
                     (col, row, kind, color, offset, (col, row + offset[1] + entrance_offset))
@@ -61,7 +62,7 @@ class RobotCow(mesa.Model):
         kind = "feeder"
         color = " #229954"
         offset = (25, 25)
-        for col in range(275, self.space.width - 50, 50):
+        for col in range(275, self.space.width - 50 - 100, 50):
             feeders.append(
                 (col, 475, kind, color, offset, (col, 475 - offset[1] - entrance_offset))
             )
@@ -88,8 +89,15 @@ class RobotCow(mesa.Model):
         offset = (25, 25)
         entrance = (225, 250 + offset[1] + entrance_offset)
         concentrates = [(225, 250, kind, color, offset, entrance)]
+        # Robot Nest
+        nest = []
+        kind = "nest"
+        color = "#5d6d7e"
+        offset = (25, 50)
+        entrance = (1075 - offset[0], 450 - offset[1] - entrance_offset)
+        nest = [(1075, 450, kind, color, offset, entrance)]
         # Complete Barn
-        barn = [cubicles, feeders, drinkers, milkers, concentrates]
+        barn = [cubicles, feeders, drinkers, milkers, concentrates, nest]
         return barn
 
     def create_patches(self):
@@ -97,17 +105,28 @@ class RobotCow(mesa.Model):
         for areas in self.barn:
             for area in areas:
                 x, y, kind, color, offset, entrance = area
-                self.entrances.append(entrance)
                 location = (x, y)
-                patch_instance = Patch(
-                    unique_id=i,
-                    model=self,
-                    pos=location,
-                    kind=kind,
-                    color=color,
-                    offset=offset,
-                    entrance=entrance,
-                )
+                if kind != "nest":
+                    self.entrances.append(entrance)
+                    patch_instance = Patch(
+                        unique_id=i,
+                        model=self,
+                        pos=location,
+                        kind=kind,
+                        color=color,
+                        offset=offset,
+                        entrance=entrance,
+                    )
+                else: # So is not a Cow target
+                    patch_instance = Nest(
+                        unique_id=i,
+                        model=self,
+                        pos=location,
+                        kind=kind,
+                        color=color,
+                        offset=offset,
+                        entrance=entrance,
+                    )
                 self.holes.append(patch_instance.env_bound)
                 self.space.place_agent(patch_instance, location)
                 self.schedule.add(patch_instance)
@@ -145,8 +164,8 @@ class RobotCow(mesa.Model):
 
     def create_robots(self):
         for i in range(self.robot_num):
-            x = self.random.random() * self.space.x_max
-            y = self.random.random() * self.space.y_max
+            x = self.random.uniform(1050 / 1100, 1) * self.space.x_max
+            y = self.random.uniform(350 / 500, 1) * self.space.y_max
             location = (x, y)
             direction = np.random.random() * 2 * np.pi
             robot_instance = Robot(
