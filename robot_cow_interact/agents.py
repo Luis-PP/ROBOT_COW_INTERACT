@@ -1,7 +1,8 @@
 import mesa
 import numpy as np
-from robot_cow_interact.util import get_line, is_close, is_out
+from robot_cow_interact.util import *
 from extremitypathfinder import PolygonEnvironment
+import sys
 
 
 class BaseAgent(mesa.Agent):
@@ -32,6 +33,81 @@ class BaseAgent(mesa.Agent):
     def check_bounds(self, location):
         return self.model.space.out_of_bounds(location)
 
+    def random_move(self):
+        x = self.model.random.random() * self.model.space.x_max
+        y = self.model.random.random() * self.model.space.y_max
+        random = self.model.space.get_heading(self.pos, (x, y))
+        random /= np.linalg.norm(random)
+        return random * 0.05
+
+    def avoid_agent(self, kind: str):
+        avoid = np.zeros(2)
+        if self.neighbors:
+            num_agents = 1
+            for neighbor in self.neighbors:
+                if neighbor.kind != kind:
+                    pass
+                else:
+                    avoid -= self.model.space.get_heading(self.pos, neighbor.pos)
+                    num_agents += 1
+            avoid /= num_agents
+            avoid_norm = np.linalg.norm(avoid)
+            if avoid_norm != 0.0:
+                avoid /= avoid_norm
+            else:
+                avoid /= 5e-324  # No zero division
+        return avoid
+
+    def get_path(self):
+        self.closest_entrance = self.get_closest_entrance()
+        self.path, length = self.environment.find_shortest_path(
+            self.closest_entrance, self.target.entrance, verify=True
+        )
+        if self.target.kind == "feeder":  # Cows stand out of feeder while eating
+            pass
+        else:
+            self.path.append(self.target.pos)
+
+    def get_closest_entrance(self):
+        entrances = np.array(self.model.entrances)
+        dist = np.linalg.norm((entrances - self.pos), axis=1)
+        min_indx = np.argmin(dist)
+        return tuple(entrances[min_indx])
+
+    def waypoint_reached(self):
+        if is_close(self.pos, self.path[0], self.step_size * 2):
+            if len(self.path) > 1:
+                self.path.pop(0)
+            else:
+                pass
+
+
+class Cow(BaseAgent):
+    def __init__(
+        self,
+        unique_id: int,
+        model: mesa.Model,
+        location: tuple,
+        step_size: int,
+        direction: float,
+        vision_rad: int,
+        state: str,
+        fear: float,
+        magnetism: float,
+        health: float,
+        kind: str = "cow",
+    ) -> None:
+        super().__init__(unique_id, model, kind, location, step_size, direction, vision_rad, state)
+        self.fear = fear
+        self.magnetism = magnetism
+        self.health = health
+        self.state = "moving"  # / "doing"
+        self.target_reached = False
+        self.time_reached = False
+        self.doing_time = 0
+        self.cow_time = 50
+        self.manure_id = 0
+
     def avoid_fence(self):
         avoid = np.zeros(2)
         if self.neighbors:
@@ -40,7 +116,7 @@ class BaseAgent(mesa.Agent):
                 if neighbor.kind != "bound":  # only check Bound class
                     pass
                 else:
-                    # Is there a target (robots does not have target)
+                    # Is there a target
                     if self.target is not None:
                         # Are the Bounds part of the target? Whit this the robot can go inside of the target area.
                         if neighbor not in self.target.agents_bound:
@@ -69,58 +145,6 @@ class BaseAgent(mesa.Agent):
             else:
                 avoid /= 5e-324
         return avoid
-
-    def random_move(self):
-        x = self.model.random.random() * self.model.space.x_max
-        y = self.model.random.random() * self.model.space.y_max
-        random = self.model.space.get_heading(self.pos, (x, y))
-        random /= np.linalg.norm(random)
-        return random * 0.05
-
-    def avoid_agent(self, kind: str):
-        avoid = np.zeros(2)
-        if self.neighbors:
-            num_agents = 1
-            for neighbor in self.neighbors:
-                if neighbor.kind != kind:
-                    pass
-                else:
-                    avoid -= self.model.space.get_heading(self.pos, neighbor.pos)
-                    num_agents += 1
-            avoid /= num_agents
-            avoid_norm = np.linalg.norm(avoid)
-            if avoid_norm != 0.0:
-                avoid /= avoid_norm
-            else:
-                avoid /= 5e-324  # No zero division
-        return avoid
-
-
-class Cow(BaseAgent):
-    def __init__(
-        self,
-        unique_id: int,
-        model: mesa.Model,
-        location: tuple,
-        step_size: int,
-        direction: float,
-        vision_rad: int,
-        state: str,
-        fear: float,
-        magnetism: float,
-        health: float,
-        kind: str = "cow",
-    ) -> None:
-        super().__init__(unique_id, model, kind, location, step_size, direction, vision_rad, state)
-        self.fear = fear
-        self.magnetism = magnetism
-        self.health = health
-        self.state = "moving"  # / "doing"
-        self.target_reached = False
-        self.time_reached = False
-        self.doing_time = 0
-        self.cow_time = 50
-        self.manure_id = 0
 
     def update_state(self):
         if self.state == "moving":
@@ -172,6 +196,7 @@ class Cow(BaseAgent):
                 + avoid_fence * self.step_size * 0.1
                 + random * self.step_size
                 + avoid_cows * self.magnetism * self.step_size
+                + avoid_robots * self.fear * self.step_size
             )
 
     def get_target(self):
@@ -204,33 +229,10 @@ class Cow(BaseAgent):
             self.get_path()
             return self.target
 
-    def get_path(self):
-        self.closest_entrance = self.get_closest_entrance()
-        self.path, length = self.environment.find_shortest_path(
-            self.closest_entrance, self.target.entrance, verify=True
-        )
-        if self.target.kind == "feeder":  # Cows stand out of feeder while eating
-            pass
-        else:
-            self.path.append(self.target.pos)
-
-    def get_closest_entrance(self):
-        entrances = np.array(self.model.entrances)
-        dist = np.linalg.norm((entrances - self.pos), axis=1)
-        min_indx = np.argmin(dist)
-        return tuple(entrances[min_indx])
-
-    def waypoint_reached(self):
-        if is_close(self.pos, self.path[0], self.step_size * 2):
-            if len(self.path) > 1:
-                self.path.pop(0)
-            else:
-                pass
-
     def defecate(self):
         poop_probab = 0.01  # 16 / 86400
         is_defecating = np.random.choice(np.array([True, False]), p=[poop_probab, 1 - poop_probab])
-        if (is_defecating and self.state == "moving" ) or (
+        if (is_defecating and self.state == "moving") or (
             is_defecating and self.state == "doing" and self.prev_target.kind == "feeder"
         ):
             out_prev_target = False
@@ -239,7 +241,8 @@ class Cow(BaseAgent):
             out_target = is_out(self.pos, self.target)
             if out_target and out_prev_target:
                 id = float(str(self.unique_id) + "." + str(self.manure_id))
-                manure_instance = Manure(unique_id=id, model=self.model)
+                rad = self.random.randrange(10)
+                manure_instance = Manure(unique_id=id, model=self.model, radius=rad)
                 self.model.space.place_agent(manure_instance, self.pos)
                 self.model.schedule.add(manure_instance)
                 self.manure_id += 1
@@ -273,35 +276,187 @@ class Robot(BaseAgent):
         super().__init__(unique_id, model, kind, location, step_size, direction, vision_rad, state)
         self.caution = caution
         self.memory = memory
-        self.battery = 1000
+        self.battery = self.random.randrange(750, 1000)
+        self.nest = self.model.get_agents_of_type(Nest)[0]
+        self.target = self.nest
+
+    def avoid_fence(self):
+        avoid = np.zeros(2)
+        if self.neighbors:
+            fences = 1
+            for neighbor in self.neighbors:
+                if neighbor.kind != "bound":  # only check Bound class
+                    pass
+                else:
+                    # Is there a target
+                    if self.target is not None:
+                        out = is_out(self.pos, self.nest)
+                        if type(self.target) == Nest or out == False:
+                            avoid = 0
+                        else:
+                            avoid -= self.model.space.get_heading(self.pos, neighbor.pos)
+                            fences += 1
+                    else:
+                        avoid -= self.model.space.get_heading(self.pos, neighbor.pos)
+                        fences += 1
+            avoid /= fences
+            avoid_norm = np.linalg.norm(avoid)
+            if avoid_norm != 0.0:
+                avoid /= avoid_norm
+            else:
+                avoid /= 5e-324
+        return avoid
 
     def update_state(self):
-        pass
+        if self.state == "in_nest":
+            if self.battery > 1000:
+                self.state = "searching"
+            else:
+                self.state = "in_nest"
+
+        elif self.state == "searching":
+            if self.battery < 250:
+                self.state = "back_to_nest"
+                self.target = self.nest
+                self.get_path()
+            else:
+                self.state = "searching"
+
+        elif self.state == "back_to_nest":
+            if is_out(self.pos, self.nest):
+                self.waypoint_reached()
+                self.state = "back_to_nest"
+            else:
+                self.state = "in_nest"
 
     def cautious(self):
         pass
 
     def next_move(self):
-        direction = self.model.space.get_heading(self.pos, self.target.pos)
+        self.look_around()
+        # Is the target an agent or jut a point
+        if self.state == "searching":
+            if hasattr(self.target, "pos"):  # Is an agent
+                if self.target.pos is not None:
+                    direction = self.model.space.get_heading(self.pos, self.target.pos)
+                else:
+                    # In case a a robot just clean the manure that another was aiming
+                    direction = self.model.space.get_heading(self.pos, self.nest.pos)
+            else:  # Is a point
+                direction = self.model.space.get_heading(self.pos, self.target)
+        elif self.state == "back_to_nest":
+            direction = self.model.space.get_heading(self.pos, self.path[0])
+        elif self.state == "in_nest":
+            direction = self.model.space.get_heading(self.pos, self.nest.pos)
         direction /= np.linalg.norm(direction)
         avoid_fence = self.avoid_fence()
         random = self.random_move()
         avoid_cows = self.avoid_agent("cow")
         avoid_robots = self.avoid_agent("robot")
-        if list(avoid_robots) != [0.0, 0.0]:
-            return self.pos + direction * self.step_size
+        if list(avoid_cows) != [0.0, 0.0]:
+            return self.pos + direction * self.step_size + avoid_cows * self.step_size * self.caution
         else:
             return (
                 self.pos
                 + direction * self.step_size
-                + avoid_fence * self.step_size * +random * self.step_size
+                + avoid_fence * self.step_size
+                + random * self.step_size
                 + avoid_cows * self.caution * self.step_size
+                + avoid_robots * self.step_size
             )
 
+    def update_battery(self):
+        if self.state == "in_nest":
+            self.battery += 5
+        else:
+            self.battery -= 1
+
+    def agent_in_vision(self, kind, vis_multiplier):
+        agents = []
+        self.neighbors = self.model.space.get_neighbors(
+            self.pos, self.vision_rad * vis_multiplier, False
+        )
+        for neighbor in self.neighbors:
+            if neighbor.kind == kind:
+                agents.append(neighbor)
+        return agents
+
+    def is_target_reach(self):
+        if self.state == "searching":
+            bounds = self.agent_in_vision("bound", 0.7)
+            if hasattr(self.target, "pos"):
+                if self.target.pos is not None:
+                    if is_close(self.pos, self.target.pos, self.step_size) or len(bounds) > 0:
+                        self.get_target()
+                    else:
+                        pass
+                else:
+                    self.get_target()
+            else:
+                if is_close(self.pos, self.target, self.step_size) or len(bounds) > 0:
+                    self.get_target()
+                else:
+                    pass
+        else:
+            self.target = self.nest
+
+    def look_around(self):
+        if self.state == "searching":
+            manures = self.agent_in_vision("manure", 3)
+            bounds = self.agent_in_vision("bound", 0.7)
+            if len(manures) > 0:
+                self.get_target()
+            elif len(bounds) > 0:
+                self.get_target()
+            else:
+                pass
+        else:
+            pass
+
+    def get_target(self):
+        if self.state == "searching":
+            manures = self.agent_in_vision("manure", 3)
+            bounds = self.agent_in_vision("bound", 0.7)
+
+            for bound in bounds:
+                if bound in self.nest.agents_bound:
+                    bounds.remove(bound)
+
+            if len(manures) > 0:
+                self.target = self.random.choice(manures)
+
+            elif len(bounds) > 0:
+                bound = np.random.choice(bounds)
+                self.target = opposite_direction(
+                    self.pos, bound.pos, self.model.space.x_max, self.model.space.y_max
+                )
+
+            else:
+                x = self.model.random.random() * self.model.space.x_max
+                y = self.model.random.random() * self.model.space.y_max
+                self.target = (x, y)
+
+        else:
+            self.target = self.nest
+
+    def clean(self):
+        if type(self.target) != Manure:
+            pass
+        else:
+            if is_close(self.pos, self.target.pos, self.step_size * 3):
+                self.model.space.remove_agent(self.target)
+                self.model.schedule.remove(self.target)
+                self.target.remove()
+                self.neighbors = self.model.space.get_neighbors(self.pos, self.vision_rad, False)
+                self.get_target()
+
     def step(self):
-        self.target = self.model.get_agents_of_type(Nest)[0]
         self.neighbors = self.model.space.get_neighbors(self.pos, self.vision_rad, False)
+        self.update_battery()
+        self.update_state()
         self.location = self.next_move()
+        self.is_target_reach()
+        self.clean()
         out_of_bounds = self.check_bounds(self.location)
         if out_of_bounds:
             self.model.space.move_agent(self, self.pos)
@@ -381,6 +536,8 @@ class Nest(Patch):
         entrance: tuple,
     ) -> None:
         super().__init__(unique_id, model, pos, kind, color, offset, entrance)
+        self.num_robots = len(self.model.get_agents_of_type(Robot))
+        self.robot_messages = []
 
 
 class Bound(mesa.Agent):
@@ -390,6 +547,9 @@ class Bound(mesa.Agent):
 
 
 class Manure(mesa.Agent):
-    def __init__(self, unique_id: int, model: mesa.Model, kind: str = "manure") -> None:
+    def __init__(
+        self, unique_id: int, model: mesa.Model, radius: int, kind: str = "manure"
+    ) -> None:
         super().__init__(unique_id, model)
         self.kind = kind
+        self.radius = radius

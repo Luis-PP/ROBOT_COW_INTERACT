@@ -11,23 +11,30 @@ def robot_cow_draw(agent):
     elif agent.kind == "cow":
         return {"Shape": "circle", "r": 12, "Filled": "true", "Color": "Black"}
     elif agent.kind == "cubicle":
-        return {"Shape": "rect", "w": 0.044, "h":0.2, "Filled": "true", "Color": agent.color}
+        return {"Shape": "rect", "w": 0.044, "h": 0.2, "Filled": "true", "Color": agent.color}
     elif agent.kind == "feeder":
-        return {"Shape": "rect", "w": 0.044, "h":0.1, "Filled": "true", "Color": agent.color}
+        return {"Shape": "rect", "w": 0.044, "h": 0.1, "Filled": "true", "Color": agent.color}
     elif agent.kind == "drinker":
-        return {"Shape": "rect", "w": 0.044, "h":0.1, "Filled": "true", "Color": agent.color}
+        return {"Shape": "rect", "w": 0.044, "h": 0.1, "Filled": "true", "Color": agent.color}
     elif agent.kind == "milker":
-        return {"Shape": "rect", "w": 0.045, "h":0.4, "Filled": "true", "Color": agent.color}
+        return {"Shape": "rect", "w": 0.045, "h": 0.4, "Filled": "true", "Color": agent.color}
     elif agent.kind == "concentrate":
-        return {"Shape": "rect", "w": 0.044, "h":0.1, "Filled": "true", "Color": agent.color}
+        return {"Shape": "rect", "w": 0.044, "h": 0.1, "Filled": "true", "Color": agent.color}
     elif agent.kind == "bound":
-        return {"Shape": "rect", "w": 0.001, "h":0.002, "Filled": "true", "Color": "black"}
+        return {"Shape": "rect", "w": 0.001, "h": 0.002, "Filled": "true", "Color": "black"}
     elif agent.kind == "nest":
-        return {"Shape": "rect", "w": 0.044, "h":0.2, "Filled": "true", "Color": agent.color}
+        return {"Shape": "rect", "w": 0.044, "h": 0.2, "Filled": "true", "Color": agent.color}
     elif agent.kind == "manure":
-        return {"Shape": "circle", "r": 4, "Filled": "true", "Color": "Purple"}
+        return {"Shape": "circle", "r": agent.radius, "Filled": "true", "Color": "Purple"}
+    else:
+        return None
 
-robot_cow_canvas = SimpleCanvas(portrayal_method=robot_cow_draw, canvas_height=500, canvas_width=1100)
+
+robot_cow_canvas = SimpleCanvas(
+    portrayal_method=robot_cow_draw, canvas_height=500, canvas_width=1100
+)
+
+chart_element = mesa.visualization.ChartModule([{"Label": "Manure", "Color": "Purple"}])
 
 model_params = {
     "width": 1101,
@@ -35,7 +42,7 @@ model_params = {
     "Cow_parameters": mesa.visualization.StaticText("Cow Parameters"),
     "cow_num": mesa.visualization.Slider(
         name="Number of Cows",
-        value=1,
+        value=2,
         min_value=0,
         max_value=100,
         step=1,
@@ -43,7 +50,7 @@ model_params = {
     ),
     "cow_step": mesa.visualization.Slider(
         name="Cow speed",
-        value=6,
+        value=5,
         min_value=1,
         max_value=20,
         step=1,
@@ -67,7 +74,7 @@ model_params = {
     ),
     "cow_fear": mesa.visualization.Slider(
         name="Cow fear",
-        value=20,
+        value=6,
         min_value=0,
         max_value=40,
         step=1,
@@ -118,6 +125,6 @@ model_params = {
 
 
 server = mesa.visualization.ModularServer(
-    RobotCow, [robot_cow_canvas], "Robot Cow Interactions", model_params
+    RobotCow, [robot_cow_canvas, chart_element], "Robot Cow Interactions", model_params
 )
 server.port = 8521

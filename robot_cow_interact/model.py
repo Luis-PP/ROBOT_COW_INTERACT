@@ -2,7 +2,7 @@ import mesa
 import numpy as np
 import geopandas as gpd
 from shapely.geometry import Polygon
-from robot_cow_interact.agents import Robot, Cow, Patch, Bound, Nest
+from robot_cow_interact.agents import Robot, Cow, Patch, Nest, Manure
 
 
 class RobotCow(mesa.Model):
@@ -22,7 +22,7 @@ class RobotCow(mesa.Model):
         robot_caution,
     ) -> None:
         super().__init__()
-        self.random.seed(36)
+        # self.random.seed(36)
         self.cow_num = cow_num
         self.cow_step = cow_step
         self.cow_vision = cow_vision
@@ -36,12 +36,24 @@ class RobotCow(mesa.Model):
         self.boundary = [(0, 0), (width, 0), (width, height), (0, height)]
         self.holes = []
         self.entrances = []
-        self.schedule = mesa.time.SimultaneousActivation(self)
+        self.schedule = mesa.time.RandomActivationByType(self)
         self.space = mesa.space.ContinuousSpace(width, height, False)
+        self.datacollector = mesa.DataCollector({"Manure": lambda m: m.schedule.get_type_count(Manure)})
         self.barn = self.create_barn()
         self.create_patches()
         self.create_robots()
         self.create_cows()
+        self.create_manure()
+        self.datacollector.collect(self)
+
+    def create_manure(self):
+        x = int(1 + (self.random.random() * (self.space.x_max - 2)))
+        y = int(1 + (self.random.random() * (self.space.y_max - 2)))
+        location = (x, y)
+        manure_instance = Manure(0, self, 1)
+        self.space.place_agent(manure_instance, location)
+        self.schedule.add(manure_instance)
+
 
     def create_barn(self):
         entrance_offset = 25
@@ -175,7 +187,7 @@ class RobotCow(mesa.Model):
                 step_size=self.robot_step,
                 direction=direction,
                 vision_rad=self.robot_vision,
-                state=None,
+                state="in_nest",
                 caution=self.robot_caution,
                 memory=[],
             )
@@ -184,3 +196,4 @@ class RobotCow(mesa.Model):
 
     def step(self):
         self.schedule.step()
+        self.datacollector.collect(self)

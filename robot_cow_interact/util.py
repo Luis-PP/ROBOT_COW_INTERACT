@@ -1,5 +1,7 @@
 import math as m
 import numpy as np
+import random
+
 
 def get_line(p1, p2, parts):
     return zip(
@@ -15,17 +17,8 @@ def is_close(own, target, dist):
         return True
     else:
         return False
-    
-# def solve(bl, tr, p) :
-#    if (p[0] > bl[0] and p[0] < tr[0] and p[1] > bl[1] and p[1] < tr[1]) :
-#       return True
-#    else :
-#       return False
-# bottom_left = (1, 1)
-# top_right = (8, 5)
-# point = (5, 4)
-# print(solve(bottom_left, top_right, point))
-    
+
+
 def is_out(own, target):
     own_x, own_y = own
     t_x, t_y = target.pos
@@ -38,3 +31,22 @@ def is_out(own, target):
         return False
     else:
         return True
+
+
+def opposite_direction(own, target, width, height):
+    own_x, own_y = own
+    t_x, t_y = target
+    dx = t_x - own_x
+    dy = t_y - own_y
+
+    if dx >= 0:
+        x_opposite = random.uniform(0, own_x)
+    else:
+        x_opposite = random.uniform(own_x, width)
+
+    if dy >= 0:
+        y_opposite = random.uniform(0, own_y)
+    else:
+        y_opposite = random.uniform(own_y, height)
+
+    return (x_opposite, y_opposite)
