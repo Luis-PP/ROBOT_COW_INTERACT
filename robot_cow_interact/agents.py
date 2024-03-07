@@ -2,7 +2,6 @@ import mesa
 import numpy as np
 from robot_cow_interact.util import *
 from extremitypathfinder import PolygonEnvironment
-import sys
 
 
 class BaseAgent(mesa.Agent):
@@ -16,6 +15,7 @@ class BaseAgent(mesa.Agent):
         direction: float,
         vision_rad: int,
         state: str,
+        color: str,
     ) -> None:
         super().__init__(unique_id, model)
         self.target = None
@@ -26,6 +26,7 @@ class BaseAgent(mesa.Agent):
         self.direction = direction
         self.vision_rad = vision_rad
         self.state = state
+        self.color = color
         self.neighbors = None
         self.environment = PolygonEnvironment()
         self.environment.store(self.model.boundary, self.model.holes)
@@ -92,12 +93,15 @@ class Cow(BaseAgent):
         direction: float,
         vision_rad: int,
         state: str,
+        color: str,
         fear: float,
         magnetism: float,
         health: float,
         kind: str = "cow",
     ) -> None:
-        super().__init__(unique_id, model, kind, location, step_size, direction, vision_rad, state)
+        super().__init__(
+            unique_id, model, kind, location, step_size, direction, vision_rad, state, color
+        )
         self.fear = fear
         self.magnetism = magnetism
         self.health = health
@@ -105,7 +109,7 @@ class Cow(BaseAgent):
         self.target_reached = False
         self.time_reached = False
         self.doing_time = 0
-        self.cow_time = 50
+        self.cow_time = 500
         self.manure_id = 0
 
     def avoid_fence(self):
@@ -269,16 +273,20 @@ class Robot(BaseAgent):
         direction: float,
         vision_rad: int,
         state: str,
+        color: str,
         caution: float,
         memory: list,
         kind: str = "robot",
     ) -> None:
-        super().__init__(unique_id, model, kind, location, step_size, direction, vision_rad, state)
+        super().__init__(
+            unique_id, model, kind, location, step_size, direction, vision_rad, state, color
+        )
         self.caution = caution
         self.memory = memory
-        self.battery = self.random.randrange(750, 1000)
+        self.battery = self.random.randrange(3000, 3600)
         self.nest = self.model.get_agents_of_type(Nest)[0]
         self.target = self.nest
+        self.point_to_help = None
 
     def avoid_fence(self):
         avoid = np.zeros(2)
@@ -309,13 +317,15 @@ class Robot(BaseAgent):
 
     def update_state(self):
         if self.state == "in_nest":
-            if self.battery > 1000:
+            self.color = "Orange"
+            if self.battery > 3600:
                 self.state = "searching"
             else:
                 self.state = "in_nest"
 
         elif self.state == "searching":
-            if self.battery < 250:
+            self.color = "Orange"
+            if self.battery < 1800:
                 self.state = "back_to_nest"
                 self.target = self.nest
                 self.get_path()
@@ -323,14 +333,31 @@ class Robot(BaseAgent):
                 self.state = "searching"
 
         elif self.state == "back_to_nest":
+            self.color = "Red"
             if is_out(self.pos, self.nest):
                 self.waypoint_reached()
                 self.state = "back_to_nest"
             else:
                 self.state = "in_nest"
 
-    def cautious(self):
-        pass
+        elif self.state == "recruited":
+            self.color = "Green"
+            self.state = "otw_to_help"
+            self.get_path_to_help()
+
+        elif self.state == "otw_to_help":
+            self.color = "Green"
+            if is_close(self.pos, self.point_to_help, self.step_size):
+                self.state = "searching"
+            else:
+                self.waypoint_reached()
+                self.state = "otw_to_help"
+
+    def get_path_to_help(self):
+        self.closest_entrance = self.get_closest_entrance()
+        self.path, length = self.environment.find_shortest_path(
+            self.closest_entrance, self.point_to_help, verify=True
+        )
 
     def next_move(self):
         self.look_around()
@@ -344,17 +371,24 @@ class Robot(BaseAgent):
                     direction = self.model.space.get_heading(self.pos, self.nest.pos)
             else:  # Is a point
                 direction = self.model.space.get_heading(self.pos, self.target)
-        elif self.state == "back_to_nest":
+        elif (
+            self.state == "back_to_nest" or self.state == "otw_to_help" or self.state == "recruited"
+        ):
             direction = self.model.space.get_heading(self.pos, self.path[0])
         elif self.state == "in_nest":
             direction = self.model.space.get_heading(self.pos, self.nest.pos)
         direction /= np.linalg.norm(direction)
-        avoid_fence = self.avoid_fence()
+        if self.state != "back_to_nest":
+            avoid_fence = self.avoid_fence()
+        else:
+            avoid_fence = 0
         random = self.random_move()
         avoid_cows = self.avoid_agent("cow")
         avoid_robots = self.avoid_agent("robot")
         if list(avoid_cows) != [0.0, 0.0]:
-            return self.pos + direction * self.step_size + avoid_cows * self.step_size * self.caution
+            return (
+                self.pos + direction * self.step_size + avoid_cows * self.step_size * self.caution
+            )
         else:
             return (
                 self.pos
@@ -367,7 +401,7 @@ class Robot(BaseAgent):
 
     def update_battery(self):
         if self.state == "in_nest":
-            self.battery += 5
+            self.battery += 1
         else:
             self.battery -= 1
 
@@ -401,7 +435,7 @@ class Robot(BaseAgent):
             self.target = self.nest
 
     def look_around(self):
-        if self.state == "searching":
+        if self.state == "searching" or self.state == "back_to_nest" or self.state == "otw_to_help":
             manures = self.agent_in_vision("manure", 3)
             bounds = self.agent_in_vision("bound", 0.7)
             if len(manures) > 0:
@@ -414,7 +448,7 @@ class Robot(BaseAgent):
             pass
 
     def get_target(self):
-        if self.state == "searching":
+        if self.state == "searching" or self.state == "back_to_nest" or self.state == "otw_to_help":
             manures = self.agent_in_vision("manure", 3)
             bounds = self.agent_in_vision("bound", 0.7)
 
@@ -423,6 +457,7 @@ class Robot(BaseAgent):
                     bounds.remove(bound)
 
             if len(manures) > 0:
+                self.state = "searching"
                 self.target = self.random.choice(manures)
 
             elif len(bounds) > 0:
@@ -444,11 +479,14 @@ class Robot(BaseAgent):
             pass
         else:
             if is_close(self.pos, self.target.pos, self.step_size * 3):
+                help_me = self.target.radius
                 self.model.space.remove_agent(self.target)
                 self.model.schedule.remove(self.target)
                 self.target.remove()
                 self.neighbors = self.model.space.get_neighbors(self.pos, self.vision_rad, False)
                 self.get_target()
+                self.nest.control[str(self.unique_id)] += help_me
+                self.nest.recruit()
 
     def step(self):
         self.neighbors = self.model.space.get_neighbors(self.pos, self.vision_rad, False)
@@ -534,10 +572,52 @@ class Nest(Patch):
         color: str,
         offset: tuple,
         entrance: tuple,
+        memory_threshold: int,
     ) -> None:
         super().__init__(unique_id, model, pos, kind, color, offset, entrance)
         self.num_robots = len(self.model.get_agents_of_type(Robot))
-        self.robot_messages = []
+        self.memory_threshold = memory_threshold
+        self.counter = 0
+        self.create_control()
+
+    def create_control(self):
+        self.control = {}
+        for robot in range(self.model.robot_num):
+            self.control[str(robot)] = 1.0
+
+    def negotiate(self):
+        try:
+            k = np.array(list(self.control.keys()))
+            v = np.array(list(self.control.values()))
+            p = v / sum(v)
+            _v = max(v) - v
+            _p = _v / sum(_v)
+            self.to_help = int(np.random.choice(a=k, p=p))
+            self.helper = int(np.random.choice(a=k, p=_p))
+            recruited = np.random.choice(
+                np.array([True, False]), p=[self.model.recruit_prob, 1 - self.model.recruit_prob]
+            )
+            return recruited
+        except:
+            return False
+
+    def recruit(self):
+        self.counter += 1
+        if self.counter > self.memory_threshold:
+            self.create_control()
+            self.counter = 0
+        if self.negotiate():
+            self.robot_to_help = self.model.get_agents_of_type(Robot)[self.to_help]
+            self.robot_helper = self.model.get_agents_of_type(Robot)[self.helper]
+            self.robot_helper.color = "Green"
+            self.robot_to_help.color = "Blue"
+            self.robot_helper.point_to_help = self.robot_to_help.get_closest_entrance()
+            self.robot_helper.state = "recruited"
+        else:
+            pass
+
+    def step(self):
+        pass
 
 
 class Bound(mesa.Agent):
