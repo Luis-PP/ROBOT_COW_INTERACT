@@ -1,3 +1,9 @@
+"""
+Author: Luis Ponce Pacheco
+Contact: luis.poncepacheco@wur.nl
+PSG, ABE group.
+"""
+
 import mesa
 import numpy as np
 from robot_cow_interact.util import *
@@ -109,7 +115,7 @@ class Cow(BaseAgent):
         self.target_reached = False
         self.time_reached = False
         self.doing_time = 0
-        self.cow_time = 500
+        self.cow_time = 1000  # Time the cow stand in an area
         self.manure_id = 0
 
     def avoid_fence(self):
@@ -147,7 +153,7 @@ class Cow(BaseAgent):
             if avoid_norm != 0.0:
                 avoid /= avoid_norm
             else:
-                avoid /= 5e-324
+                avoid /= 5e-324  # No zero division
         return avoid
 
     def update_state(self):
@@ -159,6 +165,7 @@ class Cow(BaseAgent):
                 self.state = "moving"
             else:
                 self.state = "doing"
+
         elif self.state == "doing":
             if self.time_reached == False:
                 self.check_time()
@@ -168,6 +175,7 @@ class Cow(BaseAgent):
                 self.target = self.get_target()
                 self.time_reached = False
                 self.state = "moving"
+
         else:
             raise (SyntaxError("Unknown state: %s" % (self.state)))
 
@@ -191,7 +199,7 @@ class Cow(BaseAgent):
         random = self.random_move()
         avoid_cows = self.avoid_agent("cow")
         avoid_robots = self.avoid_agent("robot")
-        if list(avoid_robots) != [0.0, 0.0]:
+        if list(avoid_robots) != [0.0, 0.0]:  # Avoid robots if any
             return self.pos + direction * self.step_size + avoid_robots * self.fear * self.step_size
         else:
             return (
@@ -204,7 +212,7 @@ class Cow(BaseAgent):
             )
 
     def get_target(self):
-        if self.target is not None:
+        if self.target is not None:  # Not the first time getting a target
             if self.target.kind != "feeder":
                 if is_close(self.pos, self.target.pos, self.step_size):
                     patches = self.model.get_agents_of_type(Patch)
@@ -227,23 +235,25 @@ class Cow(BaseAgent):
                 else:
                     self.target_reached = False
                     return self.target
-        else:
+        else:  # Getting the target the first time
             patches = self.model.get_agents_of_type(Patch)
             self.target = self.random.choice(patches)
             self.get_path()
             return self.target
 
     def defecate(self):
-        poop_probab = 0.01  # 16 / 86400
+        poop_probab = 0.002  # 16 / 86400  # 16 times per day ideally, but 0.002 for more fun
         is_defecating = np.random.choice(np.array([True, False]), p=[poop_probab, 1 - poop_probab])
         if (is_defecating and self.state == "moving") or (
-            is_defecating and self.state == "doing" and self.prev_target.kind == "feeder"
+            is_defecating
+            and self.state == "doing"
+            and self.prev_target.kind == "feeder"  # Cow can defecate while eating
         ):
             out_prev_target = False
             if self.prev_target is not None:
                 out_prev_target = is_out(self.pos, self.prev_target)
             out_target = is_out(self.pos, self.target)
-            if out_target and out_prev_target:
+            if out_target and out_prev_target:  # Do not defecate inside of the patches
                 id = float(str(self.unique_id) + "." + str(self.manure_id))
                 rad = self.random.randrange(10)
                 manure_instance = Manure(unique_id=id, model=self.model, radius=rad)
@@ -283,7 +293,7 @@ class Robot(BaseAgent):
         )
         self.caution = caution
         self.memory = memory
-        self.battery = self.random.randrange(3000, 3600)
+        self.battery = self.random.randrange(1800, 3600)
         self.nest = self.model.get_agents_of_type(Nest)[0]
         self.target = self.nest
         self.point_to_help = None
@@ -299,7 +309,7 @@ class Robot(BaseAgent):
                     # Is there a target
                     if self.target is not None:
                         out = is_out(self.pos, self.nest)
-                        if type(self.target) == Nest or out == False:
+                        if type(self.target) == Nest or out == False:  # Do not avoid nest bounds
                             avoid = 0
                         else:
                             avoid -= self.model.space.get_heading(self.pos, neighbor.pos)
@@ -318,14 +328,14 @@ class Robot(BaseAgent):
     def update_state(self):
         if self.state == "in_nest":
             self.color = "Orange"
-            if self.battery > 3600:
+            if self.battery > 3600:  # Go out every hour
                 self.state = "searching"
             else:
                 self.state = "in_nest"
 
         elif self.state == "searching":
             self.color = "Orange"
-            if self.battery < 1800:
+            if self.battery < 900:  # Back to nest if 1/4 of battery is left
                 self.state = "back_to_nest"
                 self.target = self.nest
                 self.get_path()
@@ -361,13 +371,13 @@ class Robot(BaseAgent):
 
     def next_move(self):
         self.look_around()
-        # Is the target an agent or jut a point
         if self.state == "searching":
+            # Is the target an agent or jut a point
             if hasattr(self.target, "pos"):  # Is an agent
                 if self.target.pos is not None:
                     direction = self.model.space.get_heading(self.pos, self.target.pos)
                 else:
-                    # In case a a robot just clean the manure that another was aiming
+                    # In case another robot just clean the manure that the robot was aiming
                     direction = self.model.space.get_heading(self.pos, self.nest.pos)
             else:  # Is a point
                 direction = self.model.space.get_heading(self.pos, self.target)
@@ -385,7 +395,7 @@ class Robot(BaseAgent):
         random = self.random_move()
         avoid_cows = self.avoid_agent("cow")
         avoid_robots = self.avoid_agent("robot")
-        if list(avoid_cows) != [0.0, 0.0]:
+        if list(avoid_cows) != [0.0, 0.0]:  # Avoid cows if any
             return (
                 self.pos + direction * self.step_size + avoid_cows * self.step_size * self.caution
             )
@@ -480,13 +490,14 @@ class Robot(BaseAgent):
         else:
             if is_close(self.pos, self.target.pos, self.step_size * 3):
                 help_me = self.target.radius
+                # Remove Manure agent
                 self.model.space.remove_agent(self.target)
                 self.model.schedule.remove(self.target)
                 self.target.remove()
                 self.neighbors = self.model.space.get_neighbors(self.pos, self.vision_rad, False)
                 self.get_target()
-                self.nest.control[str(self.unique_id)] += help_me
-                self.nest.recruit()
+                self.nest.control[str(self.unique_id)] += help_me  # Update manure collected
+                self.nest.recruit()  # Attempt to recruit others
 
     def step(self):
         self.neighbors = self.model.space.get_neighbors(self.pos, self.vision_rad, False)
@@ -526,13 +537,14 @@ class Patch(mesa.Agent):
         x_offset, y_offset = self.offset
         x0, x1 = x - x_offset, x + x_offset
         y0, y1 = y - y_offset, y + y_offset
-        inflate = 20
+        inflate = 20  # The agents do not move close too the patch
         env_bound = [
             [x0 - inflate, y0 - inflate],
             [x0 - inflate, y1 + inflate],
             [x1 + inflate, y1 + inflate],
             [x1 + inflate, y0 - inflate],
         ]
+        # Remove inflate from the barn edge
         if x0 == 0:  # very left
             env_bound[0][0] = x0
             env_bound[1][0] = x0
@@ -587,14 +599,14 @@ class Nest(Patch):
 
     def negotiate(self):
         try:
-            k = np.array(list(self.control.keys()))
+            robots_id = np.array(list(self.control.keys()))
             v = np.array(list(self.control.values()))
             p = v / sum(v)
             _v = max(v) - v
             _p = _v / sum(_v)
-            self.to_help = int(np.random.choice(a=k, p=p))
-            self.helper = int(np.random.choice(a=k, p=_p))
-            recruited = np.random.choice(
+            self.to_help = int(np.random.choice(a=robots_id, p=p))
+            self.helper = int(np.random.choice(a=robots_id, p=_p))
+            recruited = np.random.choice(  # Robot willing to help?
                 np.array([True, False]), p=[self.model.recruit_prob, 1 - self.model.recruit_prob]
             )
             return recruited
@@ -604,11 +616,14 @@ class Nest(Patch):
     def recruit(self):
         self.counter += 1
         if self.counter > self.memory_threshold:
-            self.create_control()
+            self.create_control()  # Reset control values
             self.counter = 0
         if self.negotiate():
             self.robot_to_help = self.model.get_agents_of_type(Robot)[self.to_help]
             self.robot_helper = self.model.get_agents_of_type(Robot)[self.helper]
+            # Helper does not have battery to help others, so to help, help himself
+            if self.robot_helper.state == "back_to_nest" or self.robot_helper.state == "in_nest":
+                self.robot_helper = self.robot_to_help
             self.robot_helper.color = "Green"
             self.robot_to_help.color = "Blue"
             self.robot_helper.point_to_help = self.robot_to_help.get_closest_entrance()

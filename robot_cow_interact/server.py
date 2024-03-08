@@ -1,6 +1,11 @@
+"""
+Author: Luis Ponce Pacheco
+Contact: luis.poncepacheco@wur.nl
+PSG, ABE group.
+"""
+
 import mesa
 
-# from robot_cow_interact.agents import Robot, Cow
 from robot_cow_interact.model import RobotCow
 from robot_cow_interact.simpleContinuousModule import SimpleCanvas
 
@@ -34,8 +39,10 @@ robot_cow_canvas = SimpleCanvas(
     portrayal_method=robot_cow_draw, canvas_height=500, canvas_width=1100
 )
 
+# Plot
 chart_element = mesa.visualization.ChartModule([{"Label": "Manure", "Color": "Purple"}])
 
+# Sliders
 model_params = {
     "width": 1101,
     "height": 501,

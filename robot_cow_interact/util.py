@@ -1,3 +1,9 @@
+"""
+Author: Luis Ponce Pacheco
+Contact: luis.poncepacheco@wur.nl
+PSG, ABE group.
+"""
+
 import math as m
 import numpy as np
 import random
