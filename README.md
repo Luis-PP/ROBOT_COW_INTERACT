@@ -23,7 +23,7 @@ Optimization.</h1>
 ### Clone the repository
 
 ```
-git clone https://github.com/Luis-PP/Simple-Task-Allocation-Manure-Robot.git
+git clone https://github.com/Luis-PP/ROBOT_COW_INTERACT.git
 ```
 
 ### Python packages
@@ -60,5 +60,5 @@ python run.py
 
 For the sensitivity analysis:
 ```
-python run.py
+python batch_run.py
 ```
