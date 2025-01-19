@@ -1,7 +1,5 @@
 """
-Author: Luis Ponce Pacheco
-Contact: luis.poncepacheco@wur.nl
-PSG, ABE group.
+Author: Luis Angel Ponce Pacheco.
 """
 
 import mesa
